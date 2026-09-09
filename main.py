@@ -360,7 +360,6 @@ if __name__ == "__main__":
                 else:
                     print(f"{allocation.group}'s is_stuffed is {allocation.is_stuffed}")
     print(len(unfulfilled_allocation_list))
-    # new feature
 
 
 
