@@ -66,13 +66,17 @@ class Config(object):
         return f"Config(name='{self.name}', build_daye={self.build_date}, qty={self.available_qty}, bstuff_code='{self.bstuff_code}', is_available={self.is_available})"
 
 def take_out_from_Config_series(config_list:list[Config], qty:int):
+    result_dict = {}
     remain_qty = qty
     for config in config_list:
         if remain_qty <= 0:
             break
         actual_qty = config.take_out(remain_qty)
+        #这里会返回.take_out这个function里返回的amount_to_take吗？
+        #yes，但没东西接着就不会显示出来
         remain_qty -= actual_qty
-        return remain_qty
+        result_dict[config.name] = actual_qty
+    return remain_qty, result_dict
 
 class ExclusiveConfig(Config):
     def __init__(self, name: str, build_date: datetime | None, bstuff_code: str):
@@ -225,7 +229,7 @@ class SubAllocation(object):
     @classmethod
     def reset_counter(cls):
         """处理完一张表格，重置计数器，下一轮从1重新计数"""
-        cls._request_id_counter.clear()
+        cls._request_ID_counter.clear()
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.__dict__!r})"
@@ -295,8 +299,6 @@ if __name__ == "__main__":
 
     print(sub_allocation_list[10:15])
 
-
-
     for row in range(2, bm_sheet.max_row + 1):
         col_name = bm_head_dic["name"]
         col_build_date = bm_head_dic["builddate"]
@@ -340,7 +342,6 @@ if __name__ == "__main__":
     sorted_allocation_list = sorted(allocation_list, key=lambda x: (x.priority, -x.requirement_qty))
     # print(sorted_allocation_list[:5])
     unfulfilled_allocation_list = []
-
     for allocation in sorted_allocation_list:
         if allocation.is_stuffed:
             continue
@@ -351,14 +352,14 @@ if __name__ == "__main__":
                     matched_cfg_list.append(config)
             if matched_cfg_list:
                 sorted_cfg_list = sorted(matched_cfg_list, key=lambda x: x.build_date)
-                remain = take_out_from_Config_series(sorted_cfg_list, allocation.approved_qty)
+                remain, stuffed_configs_dict = take_out_from_Config_series(sorted_cfg_list, allocation.approved_qty)
                 # !!这只是从config里拿出来，但还有allocation被stuff的function
-                allocation.stuff_qty += allocation.approved_qty - remain
+                allocation.stuff_qty += (allocation.approved_qty - remain)
                 if remain > 0:
                     unfulfilled_allocation_list.append(allocation)
-                    print(f'there are still {remain}x {allocation.group} that have no configs to stuff')
+                    print(f'there are still {remain}x {allocation.request_id} that have no configs to stuff, {stuffed_configs_dict}')
                 else:
-                    print(f"{allocation.group}'s is_stuffed is {allocation.is_stuffed}")
+                    print(f"{allocation.request_id}'s is_stuffed is {allocation.is_stuffed}, stuffed by {stuffed_configs_dict}")
     print(len(unfulfilled_allocation_list))
 
 

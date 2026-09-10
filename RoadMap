@@ -17,8 +17,8 @@ into that Class. #
 
 
 6. for any allocation, as long as its is_stuffed property is false: we need stuff it (how?)
-    6.1. if A config matches B allocation, take (approved qty of B)x As to fulfill B
-    ( for every allocation:
+    6.1. if A config matches B allocation, take (approved qty of B)x As to fulfill B (
+    for every allocation:
         6.1.1. skip the ones that have been stuffed (has exclusive config + handpick + stuff_qty = approved_qty) and order the rest (#
         6.1.2. to_compare_stuff_code, if true, add configs to matched_cfg_list(#
         6.1.3. to sort matched_cfg_list by .input_date (#
@@ -29,5 +29,10 @@ into that Class. #
     7.1. create a class for sub-allocations in S2F? as I have already stuffed using Allocation Class
     , sub-allocation is no more than a place to physically hold the stuffed Config（
         7.1.1. to initial .num of SubAllocation from 1 and add by 1 orderly if .request_ID doest not appear first (#
-        7.1.2. 把allocation里stuff的config依次放到S2F里 (
+
+    7.2. 把allocation里stuff的config依次放到S2F里 (
+        7.2.1. it seems like now take_out_from_Config_series can only take configs from a list of configs
+        according its .available_qty, but cannot return a list of the taken configs, which is something
+        you may use to distribute to S2F later, so consider to add this function (#
+        7.2.2. now you have stuffed_configs_dict for every allocation, put them into suballoction's Config colum (
 
