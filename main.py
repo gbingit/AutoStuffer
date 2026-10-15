@@ -8,11 +8,23 @@ from typing import List
 # 这是啥意思？专门用来注解数据类型的，新版本不需要import，可直接写list[Config]
 
 def to_normalize(text):
-    return str(text).lower().replace(' ', '').replace(',', ''.replace('-', ''.replace(';', '')))
+    target = str(text)
+    return target.lower().replace(' ', '').replace(',', '').replace('-', '').replace(';', '')
 
-dedicated_group = ['hve', 'reliability-inregion', 'systempdcupertino', 'liveon', 'wdemc']
+def take_out_one_from_dict(dic):
+    if dic.keys():
+        for key in dic.keys():
+            if dic[key] == 0:
+                continue
+            dic[key] -= 1
+            return key
+        return None
+    else:
+        return None
+
+dedicated_group = ['hve', 'reliabilityinregion', 'systempdcupertino', 'liveon', 'wdemc']
 higher_priority_groups = ['MSQ - Integration (Factory SW)', 'MSQ - Stress & Stability',
-                'Performance-Analysis', 'Performance-Tools'] #(后期要做成可变更）
+                'Performance-Analysis', 'Performance-Tools'] #(后期要做成可变更
 normed_higher_priority_groups = []
 for k in higher_priority_groups:
     normed_k = to_normalize(k)
@@ -219,12 +231,18 @@ class Allocation(object):
 class SubAllocation(object):
     _request_ID_counter = {}
     # _前置表示这个属于类私有变量，不属于某个实例，也不推荐外部直接访问
-    def __init__(self, request_ID):
+    def __init__(self, request_ID, stuffed_cfg, niche):
         self.request_ID = request_ID
         if request_ID not in self._request_ID_counter:
             self._request_ID_counter[request_ID] = 0
         self._request_ID_counter[request_ID] += 1
         self.num = self._request_ID_counter[request_ID]
+        self.stuffed_cfg = stuffed_cfg
+        self.niche = niche
+
+    @property
+    def is_stuffed(self):
+        return self.stuffed_cfg is not None
 
     @classmethod
     def reset_counter(cls):
@@ -246,6 +264,7 @@ if __name__ == "__main__":
     allocation_list = []
     config_list = []
     sub_allocation_list = []
+    exclusive_allocation_list = []
     new_append_col = allocation_sheet.max_column + 1
 
 
@@ -256,8 +275,8 @@ if __name__ == "__main__":
         col_approved_qty = allocation_head_dic["approvedqty"]
         col_approved_unit_details = allocation_head_dic["approvedunitdetails"]
         col_approved_build_phase = allocation_head_dic["approvedbuildphase"]
-        col_approved_ship_out_priority = allocation_head_dic["approvedship-outpriority"]
-        col_ship_to_location = allocation_head_dic["ship-tolocation"]
+        col_approved_ship_out_priority = allocation_head_dic["approvedshipoutpriority"]
+        col_ship_to_location = allocation_head_dic["shiptolocation"]
 
         val_group = allocation_sheet.cell(row=row, column=col_group).value
         val_astuff_code = allocation_sheet.cell(row=row, column=col_astuff_code).value
@@ -282,6 +301,10 @@ if __name__ == "__main__":
             )
             allocation_list.append(alloc_obj)
             allocation_sheet.cell(row, new_append_col).value = alloc_obj.priority
+            if alloc_obj.is_stuffed:
+                exclusive_allocation_list.append(alloc_obj.request_id)
+    print(f'exclusive_allocation_list{exclusive_allocation_list}')
+
 
     # 测试：打印第一个对象验证
     if allocation_list:
@@ -290,11 +313,12 @@ if __name__ == "__main__":
 
     for row in range(2, s2f_sheet.max_row + 1):
         col_request_id = s2f_head_dic.get(request_ID_mapping['requestid'])
-
+        col_config = s2f_head_dic.get('config')
         val_request_id = s2f_sheet.cell(row=row, column=col_request_id).value
+        target_cell = s2f_sheet.cell(row=row, column=col_config)
 
         if val_request_id:
-            sub_allocation = SubAllocation(request_ID=val_request_id)
+            sub_allocation = SubAllocation(request_ID=val_request_id, stuffed_cfg=None, niche=target_cell)
             sub_allocation_list.append(sub_allocation)
 
     print(sub_allocation_list[10:15])
@@ -346,6 +370,7 @@ if __name__ == "__main__":
         if allocation.is_stuffed:
             continue
         else:
+            match_count = 0
             matched_cfg_list = []
             for config in config_list:
                 if config.is_available and to_compare_stuff_code(allocation.astuff_code, config.bstuff_code):
@@ -356,11 +381,32 @@ if __name__ == "__main__":
                 # !!这只是从config里拿出来，但还有allocation被stuff的function
                 allocation.stuff_qty += (allocation.approved_qty - remain)
                 if remain > 0:
-                    unfulfilled_allocation_list.append(allocation)
+                    unfulfilled_allocation_list.append(allocation.request_id)
                     print(f'there are still {remain}x {allocation.request_id} that have no configs to stuff, {stuffed_configs_dict}')
                 else:
                     print(f"{allocation.request_id}'s is_stuffed is {allocation.is_stuffed}, stuffed by {stuffed_configs_dict}")
-    print(len(unfulfilled_allocation_list))
+
+            # 连接Allocation和SubAllocation using request_id
+                for sub_allocation in sub_allocation_list:
+                    if match_count >= allocation.approved_qty:
+                        break
+                    if not sub_allocation.is_stuffed and sub_allocation.request_ID == allocation.request_id:
+                        match_count += 1
+                        cfg_to_be_stuffed = take_out_one_from_dict(stuffed_configs_dict)
+                        if cfg_to_be_stuffed is None:
+                            sub_allocation.niche.value = 'empty stuffed_configs_dict'
+                            break
+                        else:
+                            sub_allocation.stuffed_cfg = cfg_to_be_stuffed
+                    sub_allocation.niche.value = sub_allocation.stuffed_cfg if sub_allocation.stuffed_cfg is not None else f'{sub_allocation.request_ID}'
+
+
+            # 会存在没有match的config的allocation吗？
+
+
+
+
+    print(len(unfulfilled_allocation_list), unfulfilled_allocation_list)
 
 
 
@@ -372,7 +418,7 @@ if __name__ == "__main__":
 
 
 
-    # wb.save('/Users/edison/Desktop/AutoAllocatorMac/PWZM EVT(c) S2F.test.xlsx')
+    wb.save('/Users/edison/Desktop/AutoStufferMac/PWZM EVT(c) S2F.test.xlsx')
 
 
 
