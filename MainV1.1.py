@@ -78,14 +78,21 @@ class Config(object):
         return f"Config(name='{self.name}', build_daye={self.build_date}, qty={self.available_qty}, bstuff_code='{self.bstuff_code}', is_available={self.is_available})"
 
 def take_out_from_Config_series(config_list:list[Config], qty:int):
+    """
+    以[cfg1,cfg2,cfg3]这样的instruction（config_list）来拿出cfg（即其对应的availableqty减），放到字典1里
+    qty参数是指要config_list里拿多少数量出来
+    返回剩余数量remain_qty和结果字典result_dict
+    如果remain_qty=0则表示config_list里的Conifg的availableqty是够拿的，>0则表示不够拿
+    """
     result_dict = {}
     remain_qty = qty
+    # remain_qty means 还有多少要拿
     for config in config_list:
         if remain_qty <= 0:
             break
         actual_qty = config.take_out(remain_qty)
         #这里会返回.take_out这个function里返回的amount_to_take吗？
-        #yes，但没东西接着就不会显示出来
+        #？yes，但没东西接着就不会显示出来
         remain_qty -= actual_qty
         result_dict[config.name] = actual_qty
     return remain_qty, result_dict
@@ -228,6 +235,11 @@ class Allocation(object):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.__dict__!r})"
 
+class ExclusiveAllocation(Allocation):
+    """
+
+    """
+
 class SubAllocation(object):
     _request_ID_counter = {}
     # _前置表示这个属于类私有变量，不属于某个实例，也不推荐外部直接访问
@@ -261,10 +273,11 @@ if __name__ == "__main__":
     allocation_head_dic = to_dic_head_index(allocation_sheet)
     s2f_head_dic = to_dic_head_index(s2f_sheet)
     bm_head_dic = to_dic_head_index(bm_sheet)
+    exclusive_cfg_list = []
     allocation_list = []
     config_list = []
     sub_allocation_list = []
-    exclusive_allocation_list = []
+    # exclusive_allocation_list = []
     new_append_col = allocation_sheet.max_column + 1
 
 
@@ -280,36 +293,39 @@ if __name__ == "__main__":
 
         val_group = allocation_sheet.cell(row=row, column=col_group).value
         val_astuff_code = allocation_sheet.cell(row=row, column=col_astuff_code).value
-        val_req_id = allocation_sheet.cell(row=row, column=col_req_id).value
+        req_id_cell = allocation_sheet.cell(row=row, column=col_req_id)
+        val_req_id = req_id_cell.value
         val_approved_qty = allocation_sheet.cell(row=row, column=col_approved_qty).value
         val_approved_unit_details = allocation_sheet.cell(row=row, column=col_approved_unit_details).value
         val_approved_build_phase = allocation_sheet.cell(row=row, column=col_approved_build_phase).value
         val_approved_ship_out_priority = allocation_sheet.cell(row=row, column=col_approved_ship_out_priority).value
         val_ship_to_location = allocation_sheet.cell(row=row, column=col_ship_to_location).value
 
+        is_bold = req_id_cell.font.bold
+
         if val_group is not None and val_astuff_code is not None and val_req_id is not None and val_approved_qty is not None:
-            alloc_obj = Allocation(
-                group=val_group,
-                astuff_code=val_astuff_code,
-                request_id=val_req_id,
-                approved_qty=val_approved_qty,
-                approved_unit_details=val_approved_unit_details,
-                stuff_qty=0,
-                approved_build_phase=val_approved_build_phase,
-                approved_ship_out_priority=val_approved_ship_out_priority,
-                ship_to_location=val_ship_to_location
-            )
-            allocation_list.append(alloc_obj)
-            allocation_sheet.cell(row, new_append_col).value = alloc_obj.priority
-            if alloc_obj.is_stuffed:
-                exclusive_allocation_list.append(alloc_obj.request_id)
-    print(f'exclusive_allocation_list{exclusive_allocation_list}')
+            if not is_bold:
+                alloc_obj = Allocation(
+                    group=val_group,
+                    astuff_code=val_astuff_code,
+                    request_id=val_req_id,
+                    approved_qty=val_approved_qty,
+                    approved_unit_details=val_approved_unit_details,
+                    stuff_qty=0,
+                    approved_build_phase=val_approved_build_phase,
+                    approved_ship_out_priority=val_approved_ship_out_priority,
+                    ship_to_location=val_ship_to_location
+                )
+                allocation_list.append(alloc_obj)
+                allocation_sheet.cell(row, new_append_col).value = alloc_obj.priority
+                # if alloc_obj.is_stuffed:
+                #     exclusive_allocation_list.append(alloc_obj.request_id)
+    # print(f'exclusive_allocation_list{exclusive_allocation_list}')
 
 
     # 测试：打印第一个对象验证
-    if allocation_list:
-        first = allocation_list[1]
-        print(first)
+    # if allocation_list:
+    #     print(f'allocation_list is {allocation_list}')
 
     for row in range(2, s2f_sheet.max_row + 1):
         col_request_id = s2f_head_dic.get(request_ID_mapping['requestid'])
@@ -330,7 +346,8 @@ if __name__ == "__main__":
         col_bstuff_code = bm_head_dic["bstuffconfig"]
         col_build_phase = bm_head_dic["buildphase"]
 
-        val_name = bm_sheet.cell(row=row, column=col_name).value
+        name_cell = bm_sheet.cell(row=row, column=col_name)
+        val_name = name_cell.value
         val_build_date = bm_sheet.cell(row=row, column=col_build_date).value
         val_available_qty = int(bm_sheet.cell(row=row, column=col_available_qty).value)
         val_bstuff_code = bm_sheet.cell(row=row, column=col_bstuff_code).value
@@ -338,21 +355,25 @@ if __name__ == "__main__":
 
         if (val_name is not None and val_build_date is not None and val_build_phase != "U" and
                 val_available_qty is not None and val_bstuff_code is not None):
-            config_obj = Config(
-                name=val_name,
-                build_date=val_build_date,
-                available_qty=val_available_qty,
-                bstuff_code=val_bstuff_code
-            )
+            is_bold = name_cell.font.bold
+            if is_bold:
+                config_obj = ExclusiveConfig(
+                    name = val_name,
+                    build_date = val_build_date,
+                    bstuff_code = val_bstuff_code,
+                )
+                exclusive_cfg_list.append(config_obj.name)
+            else:
+                config_obj = Config(
+                    name=val_name,
+                    build_date=val_build_date,
+                    available_qty=val_available_qty,
+                    bstuff_code=val_bstuff_code
+                )
             config_list.append(config_obj)
 
-    if config_list:
-        example = config_list[121]
-        print(example)
+    print(f'exclusive_cfg_list is {exclusive_cfg_list})')
 
-    #怎么确定config_list里哪些config是Exclusive ones？
-    exclusive_list = ['EVTc-Mini1PDID1-A-N-36M', 'EVTc-Mini4PDID4-A-B-64M', 'EVTc-Mini5PDID5-A-B-128M'
-                      , 'EVTc-Mini3PDID6-A-B-48M', 'Shmoo', 'Live']
     selected_names = mac_get_exclusive_name_list()
     if not selected_names:
         print("用户取消输入，无ExclusiveConfig生成")
@@ -376,8 +397,11 @@ if __name__ == "__main__":
                 if config.is_available and to_compare_stuff_code(allocation.astuff_code, config.bstuff_code):
                     matched_cfg_list.append(config)
             if matched_cfg_list:
+                # allocation with top priority in the front, and config with early build_date also,
+                # so they match one another
                 sorted_cfg_list = sorted(matched_cfg_list, key=lambda x: x.build_date)
                 remain, stuffed_configs_dict = take_out_from_Config_series(sorted_cfg_list, allocation.approved_qty)
+                # 这里的remain是什么意义？是指从匹配且排序过后的sorted_cfg_list里拿Config完毕之后还剩多少没拿
                 # !!这只是从config里拿出来，但还有allocation被stuff的function
                 allocation.stuff_qty += (allocation.approved_qty - remain)
                 if remain > 0:
@@ -385,6 +409,8 @@ if __name__ == "__main__":
                     print(f'there are still {remain}x {allocation.request_id} that have no configs to stuff, {stuffed_configs_dict}')
                 else:
                     print(f"{allocation.request_id}'s is_stuffed is {allocation.is_stuffed}, stuffed by {stuffed_configs_dict}")
+            # else:
+            #     stuffed_configs_dict = {}
 
             # 连接Allocation和SubAllocation using request_id
                 for sub_allocation in sub_allocation_list:
@@ -393,38 +419,15 @@ if __name__ == "__main__":
                     if not sub_allocation.is_stuffed and sub_allocation.request_ID == allocation.request_id:
                         match_count += 1
                         cfg_to_be_stuffed = take_out_one_from_dict(stuffed_configs_dict)
-                        if cfg_to_be_stuffed is None:
-                            sub_allocation.niche.value = 'empty stuffed_configs_dict'
+                        if cfg_to_be_stuffed is None: #如果从要用来stuff的stuffed_configs_dict里没有拿出Config
+                            sub_allocation.niche.value = '❌ no matched cfg' #?就显示空字典
                             break
                         else:
                             sub_allocation.stuffed_cfg = cfg_to_be_stuffed
-                    sub_allocation.niche.value = sub_allocation.stuffed_cfg if sub_allocation.stuffed_cfg is not None else f'{sub_allocation.request_ID}'
+                            sub_allocation.niche.value = sub_allocation.stuffed_cfg
 
 
             # 会存在没有match的config的allocation吗？
 
-
-
-
     print(len(unfulfilled_allocation_list), unfulfilled_allocation_list)
-
-
-
-
-
-
-
-
-
-
-
-    wb.save('/Users/edison/Desktop/AutoStufferMac/PWZM EVT(c) S2F.test.xlsx')
-
-
-
-
-
-
-
-
-
+    wb.save('/Users/edison/Desktop/AutoStufferMac/PWZM EVT(c) S2F.test2.xlsx')
